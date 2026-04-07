@@ -1,0 +1,953 @@
+const {
+  App,
+  ItemView,
+  Modal,
+  Notice,
+  Plugin,
+  Setting,
+  setIcon,
+} = require("obsidian");
+
+const VIEW_TYPE_PEBBLE_TRACKER = "pebble-tracker-view";
+const RECORDS_CSV_PATH = "PebbleTracker/records.csv";
+const RECORDS_CSV_HEADERS = ["id", "eventTypeId", "timestamp", "memo"];
+const DEFAULT_DATA = {
+  eventTypes: [],
+  selectedEventTypeId: null,
+};
+
+function createId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function cloneData(data) {
+  return {
+    eventTypes: [...(data.eventTypes ?? [])],
+    records: [...(data.records ?? [])],
+    selectedEventTypeId: data.selectedEventTypeId ?? null,
+  };
+}
+
+function formatDateLabel(timestamp) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function formatTimeLabel(timestamp) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function normalizeDateKey(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getRangeStart(range) {
+  if (range === "all") {
+    return null;
+  }
+
+  const days = {
+    "7d": 7,
+    "30d": 30,
+    "90d": 90,
+  }[range];
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+  return start;
+}
+
+function escapeCsvCell(value) {
+  const stringValue = String(value ?? "");
+  if (
+    stringValue.includes(",") ||
+    stringValue.includes('"') ||
+    stringValue.includes("\n")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+function serializeRecordsCsv(records) {
+  const rows = [
+    RECORDS_CSV_HEADERS.join(","),
+    ...records.map((record) =>
+      RECORDS_CSV_HEADERS.map((header) => escapeCsvCell(record[header] ?? "")).join(","),
+    ),
+  ];
+  return `${rows.join("\n")}\n`;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let insideQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (insideQuotes) {
+      if (char === '"' && nextChar === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        insideQuotes = false;
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      insideQuotes = true;
+      continue;
+    }
+
+    if (char === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (char === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    if (char === "\r") {
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows.filter((candidate) => candidate.length > 1 || candidate[0] !== "");
+}
+
+function deserializeRecordsCsv(text) {
+  if (!text.trim()) {
+    return [];
+  }
+
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const [headerRow, ...dataRows] = rows;
+  const headerIndex = Object.fromEntries(
+    headerRow.map((header, index) => [header, index]),
+  );
+
+  return dataRows
+    .filter((row) => row.some((cell) => cell !== ""))
+    .map((row) => ({
+      id: row[headerIndex.id] ?? createId("record"),
+      eventTypeId: row[headerIndex.eventTypeId] ?? "",
+      timestamp: row[headerIndex.timestamp] ?? new Date().toISOString(),
+      memo: row[headerIndex.memo] ?? "",
+    }))
+    .filter((record) => record.eventTypeId);
+}
+
+function aggregateDailyCounts(records, range) {
+  const rangeStart = getRangeStart(range);
+  const filtered = records
+    .filter((record) => {
+      if (!rangeStart) {
+        return true;
+      }
+      return new Date(record.timestamp) >= rangeStart;
+    })
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  const counts = new Map();
+  for (const record of filtered) {
+    const dateKey = normalizeDateKey(record.timestamp);
+    counts.set(dateKey, (counts.get(dateKey) ?? 0) + 1);
+  }
+
+  if (rangeStart) {
+    const cursor = new Date(rangeStart);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    while (cursor <= today) {
+      const year = cursor.getFullYear();
+      const month = String(cursor.getMonth() + 1).padStart(2, "0");
+      const day = String(cursor.getDate()).padStart(2, "0");
+      const key = `${year}-${month}-${day}`;
+      if (!counts.has(key)) {
+        counts.set(key, 0);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, count]) => ({ date, count }));
+}
+
+class PebbleTrackerStore {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.data = { ...cloneData(DEFAULT_DATA), records: [] };
+  }
+
+  async load() {
+    const loaded = await this.plugin.loadData();
+    const legacyRecords = Array.isArray(loaded?.records) ? loaded.records : [];
+    this.data = {
+      eventTypes: Array.isArray(loaded?.eventTypes) ? loaded.eventTypes : [],
+      records: await this.loadRecordsFromCsv(),
+      selectedEventTypeId:
+        typeof loaded?.selectedEventTypeId === "string"
+          ? loaded.selectedEventTypeId
+          : null,
+    };
+
+    if (this.data.records.length === 0 && legacyRecords.length > 0) {
+      this.data.records = legacyRecords;
+      await this.saveRecordsToCsv();
+      await this.savePluginData();
+    }
+
+    this.ensureSelectedEventType();
+  }
+
+  async savePluginData() {
+    await this.plugin.saveData({
+      eventTypes: this.data.eventTypes,
+      selectedEventTypeId: this.data.selectedEventTypeId,
+    });
+  }
+
+  getData() {
+    return cloneData(this.data);
+  }
+
+  getEventTypes() {
+    return [...this.data.eventTypes].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+  }
+
+  getSelectedEventType() {
+    return (
+      this.data.eventTypes.find(
+        (eventType) => eventType.id === this.data.selectedEventTypeId,
+      ) ?? null
+    );
+  }
+
+  async setSelectedEventType(id) {
+    this.data.selectedEventTypeId = id;
+    this.ensureSelectedEventType();
+    await this.savePluginData();
+  }
+
+  async createEventType(input) {
+    const eventType = {
+      id: createId("event"),
+      name: input.name.trim(),
+      icon: input.icon.trim() || "circle",
+      color: input.color.trim() || "#4f46e5",
+      allowMemo: Boolean(input.allowMemo),
+      createdAt: new Date().toISOString(),
+    };
+    this.data.eventTypes.push(eventType);
+    if (!this.data.selectedEventTypeId) {
+      this.data.selectedEventTypeId = eventType.id;
+    }
+    await this.savePluginData();
+    return eventType;
+  }
+
+  async updateEventType(id, patch) {
+    const eventType = this.data.eventTypes.find((item) => item.id === id);
+    if (!eventType) {
+      throw new Error("Event type not found");
+    }
+
+    eventType.name = patch.name.trim();
+    eventType.icon = patch.icon.trim() || "circle";
+    eventType.color = patch.color.trim() || "#4f46e5";
+    eventType.allowMemo = Boolean(patch.allowMemo);
+    await this.savePluginData();
+    return eventType;
+  }
+
+  async deleteEventType(id) {
+    this.data.eventTypes = this.data.eventTypes.filter((item) => item.id !== id);
+    this.data.records = this.data.records.filter(
+      (record) => record.eventTypeId !== id,
+    );
+    if (this.data.selectedEventTypeId === id) {
+      this.data.selectedEventTypeId = this.data.eventTypes[0]?.id ?? null;
+    }
+    this.ensureSelectedEventType();
+    await this.savePluginData();
+    await this.saveRecordsToCsv();
+  }
+
+  async createRecord(input) {
+    const record = {
+      id: createId("record"),
+      eventTypeId: input.eventTypeId,
+      timestamp: new Date().toISOString(),
+      memo: input.memo?.trim() || "",
+    };
+    this.data.records.push(record);
+    await this.saveRecordsToCsv();
+    return record;
+  }
+
+  listRecordsByEventType(eventTypeId) {
+    return this.data.records
+      .filter((record) => record.eventTypeId === eventTypeId)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+
+  listRecentRecords(eventTypeId, limit = 5) {
+    return this.listRecordsByEventType(eventTypeId).slice(0, limit);
+  }
+
+  ensureSelectedEventType() {
+    if (
+      this.data.selectedEventTypeId &&
+      this.data.eventTypes.some(
+        (eventType) => eventType.id === this.data.selectedEventTypeId,
+      )
+    ) {
+      return;
+    }
+
+    this.data.selectedEventTypeId = this.data.eventTypes[0]?.id ?? null;
+  }
+
+  async ensureRecordsCsvDirectory() {
+    const adapter = this.plugin.app.vault.adapter;
+    const segments = RECORDS_CSV_PATH.split("/").slice(0, -1);
+    let currentPath = "";
+
+    for (const segment of segments) {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      if (!(await adapter.exists(currentPath))) {
+        await adapter.mkdir(currentPath);
+      }
+    }
+  }
+
+  async loadRecordsFromCsv() {
+    const adapter = this.plugin.app.vault.adapter;
+    if (!(await adapter.exists(RECORDS_CSV_PATH))) {
+      return [];
+    }
+
+    const text = await adapter.read(RECORDS_CSV_PATH);
+    return deserializeRecordsCsv(text);
+  }
+
+  async saveRecordsToCsv() {
+    const adapter = this.plugin.app.vault.adapter;
+    await this.ensureRecordsCsvDirectory();
+    await adapter.write(RECORDS_CSV_PATH, serializeRecordsCsv(this.data.records));
+  }
+}
+
+class EventFormModal extends Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.name = options.initialValue?.name ?? "";
+    this.icon = options.initialValue?.icon ?? "circle";
+    this.color = options.initialValue?.color ?? "#4f46e5";
+    this.allowMemo = options.initialValue?.allowMemo ?? true;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("pebble-modal");
+
+    contentEl.createEl("h2", {
+      text: this.options.mode === "edit" ? "イベントを編集" : "イベントを追加",
+    });
+
+    new Setting(contentEl)
+      .setName("名前")
+      .setDesc("記録したいイベント名")
+      .addText((text) =>
+        text.setPlaceholder("例: トイレ").setValue(this.name).onChange((value) => {
+          this.name = value;
+        }),
+      );
+
+    new Setting(contentEl)
+      .setName("アイコン")
+      .setDesc("Obsidian のアイコン名")
+      .addText((text) =>
+        text.setPlaceholder("例: bath").setValue(this.icon).onChange((value) => {
+          this.icon = value;
+        }),
+      );
+
+    new Setting(contentEl)
+      .setName("色")
+      .setDesc("イベントを識別する色")
+      .addColorPicker((picker) =>
+        picker.setValue(this.color).onChange((value) => {
+          this.color = value;
+        }),
+      );
+
+    new Setting(contentEl)
+      .setName("メモを許可")
+      .setDesc("記録時にメモ欄を表示する")
+      .addToggle((toggle) =>
+        toggle.setValue(this.allowMemo).onChange((value) => {
+          this.allowMemo = value;
+        }),
+      );
+
+    const actionsEl = contentEl.createDiv({ cls: "pebble-modal-actions" });
+    const cancelButton = actionsEl.createEl("button", { text: "キャンセル" });
+    cancelButton.addEventListener("click", () => this.close());
+
+    const saveButton = actionsEl.createEl("button", {
+      text: this.options.mode === "edit" ? "更新" : "追加",
+      cls: "mod-cta",
+    });
+    saveButton.addEventListener("click", async () => {
+      if (!this.name.trim()) {
+        new Notice("イベント名を入力してください");
+        return;
+      }
+
+      await this.options.onSubmit({
+        name: this.name,
+        icon: this.icon,
+        color: this.color,
+        allowMemo: this.allowMemo,
+      });
+      this.close();
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+class ConfirmDeleteModal extends Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("pebble-modal");
+
+    contentEl.createEl("h2", { text: "イベントを削除" });
+    contentEl.createEl("p", {
+      text: `「${this.options.name}」を削除します。関連する記録もすべて削除されます。`,
+    });
+
+    const actionsEl = contentEl.createDiv({ cls: "pebble-modal-actions" });
+    const cancelButton = actionsEl.createEl("button", { text: "キャンセル" });
+    cancelButton.addEventListener("click", () => this.close());
+
+    const deleteButton = actionsEl.createEl("button", {
+      text: "削除する",
+      cls: "mod-warning",
+    });
+    deleteButton.addEventListener("click", async () => {
+      await this.options.onConfirm();
+      this.close();
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+class EventPickerModal extends Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+
+  onOpen() {
+    this.render();
+  }
+
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("pebble-modal");
+
+    contentEl.createEl("h2", { text: "イベントを切り替え" });
+
+    const listEl = contentEl.createDiv({ cls: "pebble-event-list" });
+    const eventTypes = this.plugin.store.getEventTypes();
+
+    if (eventTypes.length === 0) {
+      listEl.createEl("p", {
+        text: "イベントがありません。最初のイベントを追加してください。",
+        cls: "pebble-empty-text",
+      });
+    }
+
+    for (const eventType of eventTypes) {
+      const rowEl = listEl.createDiv({ cls: "pebble-event-row" });
+      rowEl.style.setProperty("--pebble-event-color", eventType.color);
+
+      const mainButton = rowEl.createEl("button", {
+        cls: "pebble-event-select-button",
+      });
+      const iconEl = mainButton.createSpan({ cls: "pebble-event-icon" });
+      setIcon(iconEl, eventType.icon || "circle");
+      iconEl.style.color = eventType.color;
+      mainButton.createSpan({ text: eventType.name });
+      mainButton.addEventListener("click", async () => {
+        await this.plugin.store.setSelectedEventType(eventType.id);
+        this.plugin.refreshViews();
+        this.close();
+      });
+
+      const actionEl = rowEl.createDiv({ cls: "pebble-event-row-actions" });
+
+      const editButton = actionEl.createEl("button", { text: "編集" });
+      editButton.addEventListener("click", () => {
+        new EventFormModal(this.app, {
+          mode: "edit",
+          initialValue: eventType,
+          onSubmit: async (payload) => {
+            await this.plugin.store.updateEventType(eventType.id, payload);
+            this.plugin.refreshViews();
+            this.render();
+          },
+        }).open();
+      });
+
+      const deleteButton = actionEl.createEl("button", {
+        text: "削除",
+        cls: "mod-warning",
+      });
+      deleteButton.addEventListener("click", () => {
+        new ConfirmDeleteModal(this.app, {
+          name: eventType.name,
+          onConfirm: async () => {
+            await this.plugin.store.deleteEventType(eventType.id);
+            this.plugin.refreshViews();
+            this.render();
+          },
+        }).open();
+      });
+    }
+
+    const footerEl = contentEl.createDiv({ cls: "pebble-modal-actions" });
+    const addButton = footerEl.createEl("button", {
+      text: "イベントを追加",
+      cls: "mod-cta",
+    });
+    addButton.addEventListener("click", () => {
+      new EventFormModal(this.app, {
+        mode: "create",
+        onSubmit: async (payload) => {
+          await this.plugin.store.createEventType(payload);
+          this.plugin.refreshViews();
+          this.render();
+        },
+      }).open();
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+class PebbleTrackerView extends ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.mode = "tracker";
+    this.range = "30d";
+    this.selectedDate = null;
+    this.memoInputEl = null;
+  }
+
+  getViewType() {
+    return VIEW_TYPE_PEBBLE_TRACKER;
+  }
+
+  getDisplayText() {
+    return "Pebble Tracker";
+  }
+
+  getIcon() {
+    return "activity";
+  }
+
+  async onOpen() {
+    await this.render();
+  }
+
+  async onClose() {}
+
+  async render() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.addClass("pebble-root");
+
+    const data = this.plugin.store.getData();
+    const selectedEventType = this.plugin.store.getSelectedEventType();
+
+    const headerEl = container.createDiv({ cls: "pebble-header" });
+    const titleBlockEl = headerEl.createDiv();
+    titleBlockEl.createEl("div", {
+      text: "Pebble Tracker",
+      cls: "pebble-eyebrow",
+    });
+    titleBlockEl.createEl("h1", {
+      text: selectedEventType?.name ?? "イベント未選択",
+      cls: "pebble-title",
+    });
+
+    const headerActionsEl = headerEl.createDiv({ cls: "pebble-header-actions" });
+    const pickerButton = headerActionsEl.createEl("button", { text: "イベント切替" });
+    pickerButton.addEventListener("click", () => {
+      new EventPickerModal(this.app, this.plugin).open();
+    });
+
+    const modeButton = headerActionsEl.createEl("button", {
+      text: this.mode === "tracker" ? "集計" : "記録",
+    });
+    modeButton.addEventListener("click", async () => {
+      this.mode = this.mode === "tracker" ? "stats" : "tracker";
+      await this.render();
+    });
+
+    if (data.eventTypes.length === 0) {
+      this.renderEmptyState(container);
+      return;
+    }
+
+    if (this.mode === "tracker") {
+      this.renderTracker(container, selectedEventType);
+      return;
+    }
+
+    this.renderStats(container, selectedEventType);
+  }
+
+  renderEmptyState(container) {
+    const emptyEl = container.createDiv({ cls: "pebble-empty-state" });
+    emptyEl.createEl("p", {
+      text: "まだイベントがありません。最初のイベントを追加してください。",
+    });
+
+    const addButton = emptyEl.createEl("button", {
+      text: "最初のイベントを追加",
+      cls: "mod-cta",
+    });
+    addButton.addEventListener("click", () => {
+      new EventFormModal(this.app, {
+        mode: "create",
+        onSubmit: async (payload) => {
+          await this.plugin.store.createEventType(payload);
+          this.plugin.refreshViews();
+        },
+      }).open();
+    });
+  }
+
+  renderTracker(container, selectedEventType) {
+    const cardEl = container.createDiv({ cls: "pebble-card pebble-tracker-card" });
+    cardEl.createEl("div", {
+      text: "すばやく記録",
+      cls: "pebble-section-title",
+    });
+
+    if (selectedEventType?.allowMemo) {
+      const fieldEl = cardEl.createDiv({ cls: "pebble-field" });
+      fieldEl.createEl("label", { text: "メモ" });
+      this.memoInputEl = fieldEl.createEl("textarea", {
+        cls: "pebble-memo-input",
+      });
+      this.memoInputEl.placeholder = "必要ならメモを残す";
+      this.memoInputEl.rows = 3;
+    } else {
+      this.memoInputEl = null;
+    }
+
+    const recordButton = cardEl.createEl("button", {
+      text: `${selectedEventType?.name ?? "イベント"} を記録する`,
+      cls: "mod-cta pebble-record-button",
+    });
+    recordButton.addEventListener("click", async () => {
+      if (!selectedEventType) {
+        new Notice("イベントを選択してください");
+        return;
+      }
+
+      await this.plugin.store.createRecord({
+        eventTypeId: selectedEventType.id,
+        memo: this.memoInputEl?.value ?? "",
+      });
+
+      if (this.memoInputEl) {
+        this.memoInputEl.value = "";
+      }
+
+      new Notice(`${selectedEventType.name} を記録しました`);
+      this.selectedDate = normalizeDateKey(new Date().toISOString());
+      this.plugin.refreshViews();
+    });
+
+    const recentEl = container.createDiv({ cls: "pebble-card" });
+    recentEl.createEl("div", {
+      text: "直近の記録",
+      cls: "pebble-section-title",
+    });
+
+    const recentRecords = selectedEventType
+      ? this.plugin.store.listRecentRecords(selectedEventType.id, 5)
+      : [];
+
+    if (recentRecords.length === 0) {
+      recentEl.createEl("p", {
+        text: "まだ記録がありません。",
+        cls: "pebble-empty-text",
+      });
+      return;
+    }
+
+    const listEl = recentEl.createDiv({ cls: "pebble-record-list" });
+    for (const record of recentRecords) {
+      const rowEl = listEl.createDiv({ cls: "pebble-record-row" });
+      rowEl.createSpan({
+        text: `${formatDateLabel(record.timestamp)} ${formatTimeLabel(record.timestamp)}`,
+        cls: "pebble-record-time",
+      });
+      rowEl.createSpan({
+        text: record.memo || "メモなし",
+        cls: "pebble-record-memo",
+      });
+    }
+  }
+
+  renderStats(container, selectedEventType) {
+    const cardEl = container.createDiv({ cls: "pebble-card" });
+    cardEl.createEl("div", {
+      text: "日別集計",
+      cls: "pebble-section-title",
+    });
+
+    const rangeEl = cardEl.createDiv({ cls: "pebble-range-switcher" });
+    for (const range of ["7d", "30d", "90d", "all"]) {
+      const button = rangeEl.createEl("button", {
+        text:
+          range === "7d"
+            ? "7日"
+            : range === "30d"
+              ? "30日"
+              : range === "90d"
+                ? "90日"
+                : "全期間",
+      });
+      if (this.range === range) {
+        button.addClass("is-active");
+      }
+      button.addEventListener("click", async () => {
+        this.range = range;
+        await this.render();
+      });
+    }
+
+    const records = selectedEventType
+      ? this.plugin.store.listRecordsByEventType(selectedEventType.id)
+      : [];
+    const dailyCounts = aggregateDailyCounts(records, this.range);
+
+    if (!this.selectedDate && dailyCounts.length > 0) {
+      this.selectedDate = dailyCounts[dailyCounts.length - 1].date;
+    }
+    if (
+      this.selectedDate &&
+      !dailyCounts.some((dailyCount) => dailyCount.date === this.selectedDate)
+    ) {
+      this.selectedDate = dailyCounts[dailyCounts.length - 1]?.date ?? null;
+    }
+
+    const maxCount =
+      dailyCounts.reduce((max, item) => Math.max(max, item.count), 0) || 1;
+
+    const chartEl = cardEl.createDiv({ cls: "pebble-chart" });
+    if (dailyCounts.length === 0) {
+      chartEl.createEl("p", {
+        text: "対象期間の記録がありません。",
+        cls: "pebble-empty-text",
+      });
+    } else {
+      for (const item of dailyCounts) {
+        const barWrapEl = chartEl.createDiv({ cls: "pebble-chart-bar-wrap" });
+        if (item.date === this.selectedDate) {
+          barWrapEl.addClass("is-selected");
+        }
+        const barEl = barWrapEl.createDiv({ cls: "pebble-chart-bar" });
+        barEl.style.height = `${Math.max((item.count / maxCount) * 100, item.count > 0 ? 10 : 2)}%`;
+        barEl.addEventListener("click", async () => {
+          this.selectedDate = item.date;
+          await this.render();
+        });
+        barWrapEl.createSpan({
+          text: String(item.count),
+          cls: "pebble-chart-count",
+        });
+        barWrapEl.createSpan({
+          text: item.date.slice(5),
+          cls: "pebble-chart-label",
+        });
+      }
+    }
+
+    const tableEl = container.createDiv({ cls: "pebble-card" });
+    tableEl.createEl("div", {
+      text: "日別一覧",
+      cls: "pebble-section-title",
+    });
+
+    if (dailyCounts.length === 0) {
+      tableEl.createEl("p", {
+        text: "表示できる集計がありません。",
+        cls: "pebble-empty-text",
+      });
+    } else {
+      const listEl = tableEl.createDiv({ cls: "pebble-daily-list" });
+      for (const item of [...dailyCounts].reverse()) {
+        const rowEl = listEl.createDiv({ cls: "pebble-daily-row" });
+        if (item.date === this.selectedDate) {
+          rowEl.addClass("is-selected");
+        }
+        rowEl.addEventListener("click", async () => {
+          this.selectedDate = item.date;
+          await this.render();
+        });
+        rowEl.createSpan({ text: item.date });
+        rowEl.createSpan({ text: `${item.count}回` });
+      }
+    }
+
+    const detailEl = container.createDiv({ cls: "pebble-card" });
+    detailEl.createEl("div", {
+      text: this.selectedDate ? `${this.selectedDate} の記録` : "記録一覧",
+      cls: "pebble-section-title",
+    });
+
+    const recordsForDay = records.filter(
+      (record) => normalizeDateKey(record.timestamp) === this.selectedDate,
+    );
+
+    if (recordsForDay.length === 0) {
+      detailEl.createEl("p", {
+        text: "この日の記録はありません。",
+        cls: "pebble-empty-text",
+      });
+      return;
+    }
+
+    const detailListEl = detailEl.createDiv({ cls: "pebble-record-list" });
+    for (const record of recordsForDay) {
+      const rowEl = detailListEl.createDiv({ cls: "pebble-record-row" });
+      rowEl.createSpan({
+        text: formatTimeLabel(record.timestamp),
+        cls: "pebble-record-time",
+      });
+      rowEl.createSpan({
+        text: record.memo || "メモなし",
+        cls: "pebble-record-memo",
+      });
+    }
+  }
+}
+
+module.exports = class PebbleTrackerPlugin extends Plugin {
+  async onload() {
+    this.store = new PebbleTrackerStore(this);
+    await this.store.load();
+
+    this.registerView(
+      VIEW_TYPE_PEBBLE_TRACKER,
+      (leaf) => new PebbleTrackerView(leaf, this),
+    );
+
+    this.addCommand({
+      id: "open-pebble-tracker",
+      name: "Open Pebble Tracker",
+      callback: async () => {
+        await this.activateView();
+      },
+    });
+
+    this.addRibbonIcon("activity", "Open Pebble Tracker", async () => {
+      await this.activateView();
+    });
+  }
+
+  async onunload() {
+    await this.app.workspace.detachLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER);
+  }
+
+  async activateView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER)[0];
+
+    if (!leaf) {
+      leaf = workspace.getLeaf(true);
+      await leaf.setViewState({
+        type: VIEW_TYPE_PEBBLE_TRACKER,
+        active: true,
+      });
+    }
+
+    workspace.revealLeaf(leaf);
+    this.refreshViews();
+  }
+
+  refreshViews() {
+    this.app.workspace
+      .getLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER)
+      .forEach((leaf) => {
+        if (leaf.view instanceof PebbleTrackerView) {
+          leaf.view.render();
+        }
+      });
+  }
+};

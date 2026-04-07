@@ -1,0 +1,242 @@
+.pebble-root {
+  --pebble-bg: color-mix(in srgb, var(--background-primary) 88%, var(--interactive-accent) 12%);
+  --pebble-panel: var(--background-primary);
+  --pebble-border: var(--background-modifier-border);
+  --pebble-muted: var(--text-muted);
+  --pebble-accent: var(--interactive-accent);
+  padding: 16px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--interactive-accent) 18%, transparent) 0, transparent 35%),
+    linear-gradient(180deg, var(--pebble-bg) 0%, var(--background-secondary) 100%);
+  min-height: 100%;
+}
+
+.pebble-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pebble-eyebrow {
+  color: var(--pebble-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pebble-title {
+  margin: 4px 0 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.pebble-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pebble-card {
+  background: color-mix(in srgb, var(--pebble-panel) 92%, white 8%);
+  border: 1px solid var(--pebble-border);
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.pebble-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.pebble-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pebble-memo-input {
+  width: 100%;
+  resize: vertical;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.pebble-record-button {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.pebble-record-list,
+.pebble-daily-list,
+.pebble-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pebble-record-row,
+.pebble-daily-row,
+.pebble-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background-secondary) 82%, white 18%);
+}
+
+.pebble-record-row,
+.pebble-daily-row {
+  align-items: flex-start;
+}
+
+.pebble-record-row {
+  flex-direction: column;
+}
+
+.pebble-record-time {
+  font-weight: 600;
+}
+
+.pebble-record-memo,
+.pebble-empty-text {
+  color: var(--pebble-muted);
+}
+
+.pebble-range-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pebble-range-switcher button.is-active,
+.pebble-daily-row.is-selected {
+  background: color-mix(in srgb, var(--pebble-accent) 18%, var(--background-secondary) 82%);
+  border-color: color-mix(in srgb, var(--pebble-accent) 32%, var(--pebble-border) 68%);
+}
+
+.pebble-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 180px;
+}
+
+.pebble-chart-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 180px;
+}
+
+.pebble-chart-bar-wrap.is-selected .pebble-chart-bar {
+  outline: 2px solid var(--pebble-accent);
+  outline-offset: 2px;
+}
+
+.pebble-chart-bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pebble-accent) 72%, white 28%) 0%, var(--pebble-accent) 100%);
+  cursor: pointer;
+}
+
+.pebble-chart-count {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pebble-chart-label {
+  font-size: 10px;
+  color: var(--pebble-muted);
+}
+
+.pebble-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 0;
+}
+
+.pebble-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.pebble-event-row {
+  --pebble-event-color: var(--interactive-accent);
+}
+
+.pebble-event-select-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  text-align: left;
+}
+
+.pebble-event-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pebble-event-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--pebble-event-color);
+  display: inline-block;
+}
+
+.pebble-event-icon {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 700px) {
+  .pebble-root {
+    padding: 12px;
+  }
+
+  .pebble-header {
+    flex-direction: column;
+  }
+
+  .pebble-header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .pebble-header-actions button {
+    flex: 1;
+  }
+
+  .pebble-card {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .pebble-title {
+    font-size: 24px;
+  }
+}
