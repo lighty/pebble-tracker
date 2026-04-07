@@ -362,25 +362,12 @@ class PebbleTrackerStore {
   }
 
   async load() {
-    const loaded = await this.plugin.loadData();
-    const legacyRecords = Array.isArray(loaded?.records) ? loaded.records : [];
     const settingsFromVault = await this.loadSettingsFromVault();
     this.data = {
-      eventTypes:
-        settingsFromVault?.eventTypes ??
-        (Array.isArray(loaded?.eventTypes) ? loaded.eventTypes : []),
+      eventTypes: settingsFromVault?.eventTypes ?? [],
       records: await this.loadRecordsFromCsv(),
-      selectedEventTypeId:
-        settingsFromVault?.selectedEventTypeId ??
-        (typeof loaded?.selectedEventTypeId === "string"
-          ? loaded.selectedEventTypeId
-          : null),
+      selectedEventTypeId: settingsFromVault?.selectedEventTypeId ?? null,
     };
-
-    if (this.data.records.length === 0 && legacyRecords.length > 0) {
-      this.data.records = legacyRecords;
-      await this.saveRecordsToCsv();
-    }
 
     this.ensureSelectedEventType();
 

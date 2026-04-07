@@ -63,7 +63,7 @@ export interface PebbleTrackerData {
 - `selectedEventTypeId` は前回選択イベント復元に使う
 - `timestamp` は ISO 8601 文字列で保存する
 - イベント定義と選択状態は `PebbleTracker/settings.json` に保存する
-- `EventRecord` は plugin data ではなく `PebbleTracker/records.csv.md` に保存する
+- `EventRecord` は `PebbleTracker/records.csv.md` に保存する
 
 ## メインフロー
 
@@ -71,11 +71,10 @@ export interface PebbleTrackerData {
 
 1. `PebbleTracker/settings.json` を読み込む
 2. `PebbleTracker/records.csv.md` を読み込む
-3. 旧形式の plugin data が残っていたら settings / records に移行する
-4. データが未初期化なら空データを生成する
-5. ビューを登録する
-6. コマンド `Open Pebble Tracker` を登録する
-7. リボンアイコンを登録する
+3. データが未初期化なら空データを生成する
+4. ビューを登録する
+5. コマンド `Open Pebble Tracker` を登録する
+6. リボンアイコンを登録する
 
 ### 記録画面を開く
 
