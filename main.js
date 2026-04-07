@@ -858,6 +858,10 @@ class PebbleTrackerView extends ItemView {
           cls: "pebble-chart-label",
         });
       }
+
+      window.requestAnimationFrame(() => {
+        chartEl.scrollLeft = chartEl.scrollWidth;
+      });
     }
 
     const tableEl = container.createDiv({ cls: "pebble-card" });
