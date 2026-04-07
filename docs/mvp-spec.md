@@ -127,9 +127,10 @@ MVP のイベント定義は以下の項目を持つ。
 
 ## 保存方式
 
+- イベント定義と選択状態は Vault 内の JSON ファイルとして保存する
+- 既定パスは `PebbleTracker/settings.json` とする
 - 記録レコードは Vault 内の CSV ファイルとして保存する
 - 既定パスは `PebbleTracker/records.csv.md` とする
-- イベント定義と選択状態は plugin data に保存する
 - CSV はユーザーが後から再利用・編集しやすいことを優先する
 
 ## MVP で扱わないもの

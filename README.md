@@ -9,8 +9,9 @@ Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and
 - Optional memo input per event type
 - Aggregate views for daily, weekly, and monthly counts
 - Bar chart and list views for the selected aggregation unit
+- Shared event definitions through a vault settings file
 - Record storage in a vault file at `PebbleTracker/records.csv.md`
-- Automatic reload when `records.csv.md` is edited in the vault
+- Automatic reload when `settings.json` or `records.csv.md` is edited in the vault
 
 ## Aggregation Modes
 
@@ -28,7 +29,7 @@ Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and
 
 ## Data Storage
 
-- Event definitions and the currently selected event are stored in Obsidian plugin data
+- Event definitions and the currently selected event are stored in the vault at `PebbleTracker/settings.json`
 - Event records are stored in the vault at `PebbleTracker/records.csv.md`
 
 CSV header:

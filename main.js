@@ -11,6 +11,7 @@ const {
 
 const VIEW_TYPE_PEBBLE_TRACKER = "pebble-tracker-view";
 const RECORDS_CSV_PATH = "PebbleTracker/records.csv.md";
+const SETTINGS_JSON_PATH = "PebbleTracker/settings.json";
 const RECORDS_CSV_HEADERS = ["id", "eventTypeId", "timestamp", "memo"];
 const DEFAULT_DATA = {
   eventTypes: [],
@@ -271,6 +272,33 @@ function deserializeRecordsCsv(text) {
     .filter((record) => record.eventTypeId);
 }
 
+function serializeSettingsJson(data) {
+  return `${JSON.stringify(
+    {
+      eventTypes: data.eventTypes ?? [],
+      selectedEventTypeId: data.selectedEventTypeId ?? null,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function deserializeSettingsJson(text) {
+  if (!text.trim()) {
+    return cloneData(DEFAULT_DATA);
+  }
+
+  const parsed = JSON.parse(text);
+  return {
+    eventTypes: Array.isArray(parsed?.eventTypes) ? parsed.eventTypes : [],
+    records: [],
+    selectedEventTypeId:
+      typeof parsed?.selectedEventTypeId === "string"
+        ? parsed.selectedEventTypeId
+        : null,
+  };
+}
+
 function aggregateCounts(records, range, granularity) {
   const rangeStart = getRangeStart(range);
   const filtered = records
@@ -336,33 +364,55 @@ class PebbleTrackerStore {
   async load() {
     const loaded = await this.plugin.loadData();
     const legacyRecords = Array.isArray(loaded?.records) ? loaded.records : [];
+    const settingsFromVault = await this.loadSettingsFromVault();
     this.data = {
-      eventTypes: Array.isArray(loaded?.eventTypes) ? loaded.eventTypes : [],
+      eventTypes:
+        settingsFromVault?.eventTypes ??
+        (Array.isArray(loaded?.eventTypes) ? loaded.eventTypes : []),
       records: await this.loadRecordsFromCsv(),
       selectedEventTypeId:
-        typeof loaded?.selectedEventTypeId === "string"
+        settingsFromVault?.selectedEventTypeId ??
+        (typeof loaded?.selectedEventTypeId === "string"
           ? loaded.selectedEventTypeId
-          : null,
+          : null),
     };
 
     if (this.data.records.length === 0 && legacyRecords.length > 0) {
       this.data.records = legacyRecords;
       await this.saveRecordsToCsv();
-      await this.savePluginData();
     }
 
     this.ensureSelectedEventType();
+
+    if (!settingsFromVault) {
+      await this.saveSettingsToVault();
+    }
   }
 
   async reloadRecords() {
     this.data.records = await this.loadRecordsFromCsv();
   }
 
-  async savePluginData() {
-    await this.plugin.saveData({
-      eventTypes: this.data.eventTypes,
-      selectedEventTypeId: this.data.selectedEventTypeId,
-    });
+  async reloadSettings() {
+    const loaded = await this.loadSettingsFromVault();
+    this.data.eventTypes = loaded?.eventTypes ?? [];
+    this.data.selectedEventTypeId = loaded?.selectedEventTypeId ?? null;
+    this.ensureSelectedEventType();
+  }
+
+  async saveSettingsToVault() {
+    const vault = this.plugin.app.vault;
+    const filePath = normalizePath(SETTINGS_JSON_PATH);
+    await this.ensureStorageDirectory();
+    const content = serializeSettingsJson(this.data);
+    const existingFile = vault.getAbstractFileByPath(filePath);
+
+    if (existingFile) {
+      await vault.modify(existingFile, content);
+      return;
+    }
+
+    await vault.create(filePath, content);
   }
 
   getData() {
@@ -386,7 +436,7 @@ class PebbleTrackerStore {
   async setSelectedEventType(id) {
     this.data.selectedEventTypeId = id;
     this.ensureSelectedEventType();
-    await this.savePluginData();
+    await this.saveSettingsToVault();
   }
 
   async createEventType(input) {
@@ -402,7 +452,7 @@ class PebbleTrackerStore {
     if (!this.data.selectedEventTypeId) {
       this.data.selectedEventTypeId = eventType.id;
     }
-    await this.savePluginData();
+    await this.saveSettingsToVault();
     return eventType;
   }
 
@@ -416,7 +466,7 @@ class PebbleTrackerStore {
     eventType.icon = patch.icon.trim() || "circle";
     eventType.color = patch.color.trim() || "#4f46e5";
     eventType.allowMemo = Boolean(patch.allowMemo);
-    await this.savePluginData();
+    await this.saveSettingsToVault();
     return eventType;
   }
 
@@ -429,7 +479,7 @@ class PebbleTrackerStore {
       this.data.selectedEventTypeId = this.data.eventTypes[0]?.id ?? null;
     }
     this.ensureSelectedEventType();
-    await this.savePluginData();
+    await this.saveSettingsToVault();
     await this.saveRecordsToCsv();
   }
 
@@ -468,7 +518,7 @@ class PebbleTrackerStore {
     this.data.selectedEventTypeId = this.data.eventTypes[0]?.id ?? null;
   }
 
-  async ensureRecordsCsvDirectory() {
+  async ensureStorageDirectory() {
     const vault = this.plugin.app.vault;
     const segments = normalizePath(RECORDS_CSV_PATH).split("/").slice(0, -1);
     let currentPath = "";
@@ -495,7 +545,7 @@ class PebbleTrackerStore {
   async saveRecordsToCsv() {
     const vault = this.plugin.app.vault;
     const filePath = normalizePath(RECORDS_CSV_PATH);
-    await this.ensureRecordsCsvDirectory();
+    await this.ensureStorageDirectory();
     const content = serializeRecordsCsv(this.data.records);
     const existingFile = vault.getAbstractFileByPath(filePath);
 
@@ -505,6 +555,17 @@ class PebbleTrackerStore {
     }
 
     await vault.create(filePath, content);
+  }
+
+  async loadSettingsFromVault() {
+    const vault = this.plugin.app.vault;
+    const file = vault.getAbstractFileByPath(normalizePath(SETTINGS_JSON_PATH));
+    if (!file) {
+      return null;
+    }
+
+    const text = await vault.cachedRead(file);
+    return deserializeSettingsJson(text);
   }
 }
 
@@ -1109,45 +1170,69 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
 
     const isRecordsFile = (file) =>
       file && normalizePath(file.path) === normalizePath(RECORDS_CSV_PATH);
+    const isSettingsFile = (file) =>
+      file && normalizePath(file.path) === normalizePath(SETTINGS_JSON_PATH);
 
     this.registerEvent(
       this.app.vault.on("modify", async (file) => {
-        if (!isRecordsFile(file)) {
+        if (isRecordsFile(file)) {
+          await this.store.reloadRecords();
+          this.refreshViews();
           return;
         }
-        await this.store.reloadRecords();
-        this.refreshViews();
+        if (isSettingsFile(file)) {
+          await this.store.reloadSettings();
+          this.refreshViews();
+        }
       }),
     );
 
     this.registerEvent(
       this.app.vault.on("create", async (file) => {
-        if (!isRecordsFile(file)) {
+        if (isRecordsFile(file)) {
+          await this.store.reloadRecords();
+          this.refreshViews();
           return;
         }
-        await this.store.reloadRecords();
-        this.refreshViews();
+        if (isSettingsFile(file)) {
+          await this.store.reloadSettings();
+          this.refreshViews();
+        }
       }),
     );
 
     this.registerEvent(
       this.app.vault.on("delete", async (file) => {
-        if (!isRecordsFile(file)) {
+        if (isRecordsFile(file)) {
+          await this.store.reloadRecords();
+          this.refreshViews();
           return;
         }
-        await this.store.reloadRecords();
-        this.refreshViews();
+        if (isSettingsFile(file)) {
+          await this.store.reloadSettings();
+          this.refreshViews();
+        }
       }),
     );
 
     this.registerEvent(
       this.app.vault.on("rename", async (file, oldPath) => {
         const normalizedOldPath = normalizePath(oldPath);
-        if (!isRecordsFile(file) && normalizedOldPath !== normalizePath(RECORDS_CSV_PATH)) {
+        if (
+          isRecordsFile(file) ||
+          normalizedOldPath === normalizePath(RECORDS_CSV_PATH)
+        ) {
+          await this.store.reloadRecords();
+          this.refreshViews();
           return;
         }
-        await this.store.reloadRecords();
-        this.refreshViews();
+        if (
+          isSettingsFile(file) ||
+          normalizedOldPath === normalizePath(SETTINGS_JSON_PATH)
+        ) {
+          await this.store.reloadSettings();
+          this.refreshViews();
+        }
       }),
     );
   }
