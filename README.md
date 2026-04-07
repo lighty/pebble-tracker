@@ -1,37 +1,55 @@
 # Pebble Tracker
 
-Pebble Tracker は Obsidian 向けのイベント記録プラグインです。ユーザーが任意のイベントを定義し、スマートフォンで素早く記録し、あとから日別・週別・月別の集計で振り返ることを目的としています。
+Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and reviewing them later with simple aggregate views. It is designed around fast mobile input, while keeping the recorded data accessible inside the vault.
 
-## 現在の実装範囲
+## Current Scope
 
-- 専用タブでの記録画面
-- GUI でのイベント追加・編集・削除
-- メモ付きイベント記録
-- 日別・週別・月別の棒グラフと一覧
-- 記録レコードの CSV 保存
+- Dedicated tracker tab for fast event logging
+- GUI-based event creation, editing, and deletion
+- Optional memo input per event type
+- Aggregate views for daily, weekly, and monthly counts
+- Bar chart and list views for the selected aggregation unit
+- Record storage in a vault file at `PebbleTracker/records.csv.md`
+- Automatic reload when `records.csv.md` is edited in the vault
 
-## ファイル構成
+## Aggregation Modes
 
-- [manifest.json](/Users/lighty/ghq/github.com/lighty/pebble-tracker/manifest.json): Obsidian プラグイン定義
-- [main.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/main.js): プラグイン本体
-- [styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/styles.css): 画面スタイル
-- [docs/mvp-spec.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/mvp-spec.md): MVP 仕様
-- [docs/technical-design.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/technical-design.md): 技術設計メモ
+- Daily: `30 days` or `All time`
+- Weekly: `7 weeks` or `All time`
+- Monthly: `12 months` or `All time`
 
-## 保存データ
+## File Layout
 
-- イベント定義と選択中イベントは Obsidian の plugin data に保存します
-- 記録レコードは Vault 内の `PebbleTracker/records.csv.md` に保存します
+- [manifest.json](/Users/lighty/ghq/github.com/lighty/pebble-tracker/manifest.json): Obsidian plugin manifest
+- [main.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/main.js): Plugin implementation
+- [styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/styles.css): UI styles
+- [docs/mvp-spec.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/mvp-spec.md): MVP specification
+- [docs/technical-design.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/technical-design.md): Technical design notes
 
-CSV ヘッダー:
+## Data Storage
+
+- Event definitions and the currently selected event are stored in Obsidian plugin data
+- Event records are stored in the vault at `PebbleTracker/records.csv.md`
+
+CSV header:
 
 ```csv
 id,eventTypeId,timestamp,memo
 ```
 
-## ローカル確認
+The file uses a `.md` suffix so it stays visible and openable in Obsidian's file tree, while the content itself remains CSV-formatted.
 
-ビルドツールはまだ導入していないため、現状の最低限の確認は以下です。
+## Usage
+
+1. Enable the plugin in Obsidian Community Plugins
+2. Open `Pebble Tracker` from the left ribbon or the `Open Pebble Tracker` command
+3. Create one or more event types
+4. Select an event, optionally add a memo, and tap the record button
+5. Switch to the stats view to inspect daily, weekly, or monthly aggregates
+
+## Local Check
+
+There is no build pipeline yet. The current minimum validation step is:
 
 ```bash
 node --check main.js
