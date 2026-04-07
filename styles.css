@@ -143,10 +143,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
-  min-height: 180px;
   flex: 0 0 36px;
+}
+
+.pebble-chart-bar-area {
+  height: 120px;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
 }
 
 .pebble-chart-bar-wrap.is-selected .pebble-chart-bar {
@@ -156,7 +161,7 @@
 
 .pebble-chart-bar {
   width: 100%;
-  border-radius: 999px;
+  border-radius: 999px 999px 0 0;
   background: linear-gradient(180deg, color-mix(in srgb, var(--pebble-accent) 72%, white 28%) 0%, var(--pebble-accent) 100%);
   cursor: pointer;
 }

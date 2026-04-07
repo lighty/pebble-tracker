@@ -836,7 +836,12 @@ class PebbleTrackerView extends ItemView {
         if (item.date === this.selectedDate) {
           barWrapEl.addClass("is-selected");
         }
-        const barEl = barWrapEl.createDiv({ cls: "pebble-chart-bar" });
+        barWrapEl.createSpan({
+          text: String(item.count),
+          cls: "pebble-chart-count",
+        });
+        const barAreaEl = barWrapEl.createDiv({ cls: "pebble-chart-bar-area" });
+        const barEl = barAreaEl.createDiv({ cls: "pebble-chart-bar" });
         if (item.count > 0) {
           barEl.style.height = `${(item.count / maxCount) * 100}%`;
           barEl.addClass("has-value");
@@ -847,10 +852,6 @@ class PebbleTrackerView extends ItemView {
         barEl.addEventListener("click", async () => {
           this.selectedDate = item.date;
           await this.render();
-        });
-        barWrapEl.createSpan({
-          text: String(item.count),
-          cls: "pebble-chart-count",
         });
         barWrapEl.createSpan({
           text: item.date.slice(5),
