@@ -57,9 +57,19 @@ The file uses a `.md` suffix so it stays visible and openable in Obsidian's file
 4. Enter `https://github.com/lighty/pebble-tracker`
 5. Install and enable `Pebble Tracker`
 
+BRAT expects this repository to publish GitHub Releases. If installation fails, make sure you are using a released version instead of an unreleased commit.
+
 ### Manual install
 
 Copy these files into your vault at `.obsidian/plugins/pebble-tracker/`:
+
+- `manifest.json`
+- `main.js`
+- `styles.css`
+
+## Releases
+
+This repository publishes GitHub Releases for BRAT and future Community Plugins distribution. Each release includes these assets:
 
 - `manifest.json`
 - `main.js`
