@@ -152,10 +152,18 @@
 
 .pebble-chart-bar {
   width: 100%;
-  min-height: 2px;
   border-radius: 999px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--pebble-accent) 72%, white 28%) 0%, var(--pebble-accent) 100%);
   cursor: pointer;
+}
+
+.pebble-chart-bar.has-value {
+  min-height: 8px;
+}
+
+.pebble-chart-bar.is-zero {
+  min-height: 1px;
+  opacity: 0.25;
 }
 
 .pebble-chart-count {

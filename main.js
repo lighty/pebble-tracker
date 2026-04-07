@@ -5,11 +5,12 @@ const {
   Notice,
   Plugin,
   Setting,
+  normalizePath,
   setIcon,
 } = require("obsidian");
 
 const VIEW_TYPE_PEBBLE_TRACKER = "pebble-tracker-view";
-const RECORDS_CSV_PATH = "PebbleTracker/records.csv";
+const RECORDS_CSV_PATH = "PebbleTracker/records.csv.md";
 const RECORDS_CSV_HEADERS = ["id", "eventTypeId", "timestamp", "memo"];
 const DEFAULT_DATA = {
   eventTypes: [],
@@ -237,6 +238,10 @@ class PebbleTrackerStore {
     this.ensureSelectedEventType();
   }
 
+  async reloadRecords() {
+    this.data.records = await this.loadRecordsFromCsv();
+  }
+
   async savePluginData() {
     await this.plugin.saveData({
       eventTypes: this.data.eventTypes,
@@ -348,32 +353,42 @@ class PebbleTrackerStore {
   }
 
   async ensureRecordsCsvDirectory() {
-    const adapter = this.plugin.app.vault.adapter;
-    const segments = RECORDS_CSV_PATH.split("/").slice(0, -1);
+    const vault = this.plugin.app.vault;
+    const segments = normalizePath(RECORDS_CSV_PATH).split("/").slice(0, -1);
     let currentPath = "";
 
     for (const segment of segments) {
       currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-      if (!(await adapter.exists(currentPath))) {
-        await adapter.mkdir(currentPath);
+      if (!vault.getAbstractFileByPath(currentPath)) {
+        await vault.createFolder(currentPath);
       }
     }
   }
 
   async loadRecordsFromCsv() {
-    const adapter = this.plugin.app.vault.adapter;
-    if (!(await adapter.exists(RECORDS_CSV_PATH))) {
+    const vault = this.plugin.app.vault;
+    const file = vault.getAbstractFileByPath(normalizePath(RECORDS_CSV_PATH));
+    if (!file) {
       return [];
     }
 
-    const text = await adapter.read(RECORDS_CSV_PATH);
+    const text = await vault.cachedRead(file);
     return deserializeRecordsCsv(text);
   }
 
   async saveRecordsToCsv() {
-    const adapter = this.plugin.app.vault.adapter;
+    const vault = this.plugin.app.vault;
+    const filePath = normalizePath(RECORDS_CSV_PATH);
     await this.ensureRecordsCsvDirectory();
-    await adapter.write(RECORDS_CSV_PATH, serializeRecordsCsv(this.data.records));
+    const content = serializeRecordsCsv(this.data.records);
+    const existingFile = vault.getAbstractFileByPath(filePath);
+
+    if (existingFile) {
+      await vault.modify(existingFile, content);
+      return;
+    }
+
+    await vault.create(filePath, content);
   }
 }
 
@@ -822,7 +837,13 @@ class PebbleTrackerView extends ItemView {
           barWrapEl.addClass("is-selected");
         }
         const barEl = barWrapEl.createDiv({ cls: "pebble-chart-bar" });
-        barEl.style.height = `${Math.max((item.count / maxCount) * 100, item.count > 0 ? 10 : 2)}%`;
+        if (item.count > 0) {
+          barEl.style.height = `${(item.count / maxCount) * 100}%`;
+          barEl.addClass("has-value");
+        } else {
+          barEl.style.height = "0%";
+          barEl.addClass("is-zero");
+        }
         barEl.addEventListener("click", async () => {
           this.selectedDate = item.date;
           await this.render();
@@ -919,6 +940,50 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
     this.addRibbonIcon("activity", "Open Pebble Tracker", async () => {
       await this.activateView();
     });
+
+    const isRecordsFile = (file) =>
+      file && normalizePath(file.path) === normalizePath(RECORDS_CSV_PATH);
+
+    this.registerEvent(
+      this.app.vault.on("modify", async (file) => {
+        if (!isRecordsFile(file)) {
+          return;
+        }
+        await this.store.reloadRecords();
+        this.refreshViews();
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on("create", async (file) => {
+        if (!isRecordsFile(file)) {
+          return;
+        }
+        await this.store.reloadRecords();
+        this.refreshViews();
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on("delete", async (file) => {
+        if (!isRecordsFile(file)) {
+          return;
+        }
+        await this.store.reloadRecords();
+        this.refreshViews();
+      }),
+    );
+
+    this.registerEvent(
+      this.app.vault.on("rename", async (file, oldPath) => {
+        const normalizedOldPath = normalizePath(oldPath);
+        if (!isRecordsFile(file) && normalizedOldPath !== normalizePath(RECORDS_CSV_PATH)) {
+          return;
+        }
+        await this.store.reloadRecords();
+        this.refreshViews();
+      }),
+    );
   }
 
   async onunload() {

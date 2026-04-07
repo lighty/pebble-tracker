@@ -62,14 +62,14 @@ export interface PebbleTrackerData {
 - `createdAt` は作成順の安定表示に使う
 - `selectedEventTypeId` は前回選択イベント復元に使う
 - `timestamp` は ISO 8601 文字列で保存する
-- `EventRecord` は plugin data ではなく `PebbleTracker/records.csv` に保存する
+- `EventRecord` は plugin data ではなく `PebbleTracker/records.csv.md` に保存する
 
 ## メインフロー
 
 ### 起動時
 
 1. plugin data を読み込む
-2. `PebbleTracker/records.csv` を読み込む
+2. `PebbleTracker/records.csv.md` を読み込む
 3. 旧形式の plugin data 内 records が残っていたら CSV に移行する
 4. データが未初期化なら空データを生成する
 5. ビューを登録する
@@ -88,7 +88,7 @@ export interface PebbleTrackerData {
 1. 選択中イベントを確認する
 2. メモ欄の値を読む
 3. 新しい `EventRecord` を生成する
-4. `PebbleTracker/records.csv` に保存する
+4. `PebbleTracker/records.csv.md` に保存する
 5. メモ欄をクリアする
 6. 記録一覧と集計を再描画する
 7. 通知を表示する
