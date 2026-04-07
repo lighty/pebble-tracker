@@ -47,6 +47,24 @@ The file uses a `.md` suffix so it stays visible and openable in Obsidian's file
 4. Select an event, optionally add a memo, and tap the record button
 5. Switch to the stats view to inspect daily, weekly, or monthly aggregates
 
+## Installation
+
+### Install with BRAT
+
+1. Install the `BRAT` plugin from Obsidian Community Plugins
+2. Open `BRAT` settings
+3. Choose `Add Beta plugin`
+4. Enter `https://github.com/lighty/pebble-tracker`
+5. Install and enable `Pebble Tracker`
+
+### Manual install
+
+Copy these files into your vault at `.obsidian/plugins/pebble-tracker/`:
+
+- `manifest.json`
+- `main.js`
+- `styles.css`
+
 ## Local Check
 
 There is no build pipeline yet. The current minimum validation step is:
