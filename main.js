@@ -11,7 +11,7 @@ const {
 
 const VIEW_TYPE_PEBBLE_TRACKER = "pebble-tracker-view";
 const RECORDS_CSV_PATH = "PebbleTracker/records.csv.md";
-const SETTINGS_JSON_PATH = "PebbleTracker/settings.json";
+const SETTINGS_JSON_PATH = "PebbleTracker/settings.json.md";
 const RECORDS_CSV_HEADERS = ["id", "eventTypeId", "timestamp", "memo"];
 const DEFAULT_DATA = {
   eventTypes: [],
@@ -370,10 +370,6 @@ class PebbleTrackerStore {
     };
 
     this.ensureSelectedEventType();
-
-    if (!settingsFromVault) {
-      await this.saveSettingsToVault();
-    }
   }
 
   async reloadRecords() {

@@ -1,7 +1,7 @@
 {
   "id": "pebble-tracker",
   "name": "Pebble Tracker",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "minAppVersion": "1.5.0",
   "description": "Track custom events quickly and review them with daily, weekly, and monthly charts.",
   "author": "lighty",

@@ -62,14 +62,14 @@ export interface PebbleTrackerData {
 - `createdAt` は作成順の安定表示に使う
 - `selectedEventTypeId` は前回選択イベント復元に使う
 - `timestamp` は ISO 8601 文字列で保存する
-- イベント定義と選択状態は `PebbleTracker/settings.json` に保存する
+- イベント定義と選択状態は `PebbleTracker/settings.json.md` に保存する
 - `EventRecord` は `PebbleTracker/records.csv.md` に保存する
 
 ## メインフロー
 
 ### 起動時
 
-1. `PebbleTracker/settings.json` を読み込む
+1. `PebbleTracker/settings.json.md` を読み込む
 2. `PebbleTracker/records.csv.md` を読み込む
 3. データが未初期化なら空データを生成する
 4. ビューを登録する
