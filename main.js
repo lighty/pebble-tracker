@@ -1149,7 +1149,6 @@ class PebbleTrackerView extends ItemView {
 module.exports = class PebbleTrackerPlugin extends Plugin {
   async onload() {
     this.store = new PebbleTrackerStore(this);
-    await this.store.load();
 
     this.registerView(
       VIEW_TYPE_PEBBLE_TRACKER,
@@ -1166,6 +1165,24 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
 
     this.addRibbonIcon("activity", "Open Pebble Tracker", async () => {
       await this.activateView();
+    });
+
+    try {
+      await this.store.load();
+    } catch (error) {
+      console.error("Pebble Tracker: failed to load data during onload", error);
+      new Notice("Pebble Tracker: data load failed on startup. Retrying shortly.");
+    }
+
+    this.app.workspace.onLayoutReady(() => {
+      window.setTimeout(async () => {
+        try {
+          await this.store.load();
+          this.refreshViews();
+        } catch (error) {
+          console.error("Pebble Tracker: failed to reload data after layout ready", error);
+        }
+      }, 300);
     });
 
     const isRecordsFile = (file) =>
@@ -1262,7 +1279,7 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
       .getLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER)
       .forEach((leaf) => {
         if (leaf.view instanceof PebbleTrackerView) {
-          leaf.view.render();
+          void leaf.view.render();
         }
       });
   }
