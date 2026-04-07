@@ -1149,6 +1149,8 @@ class PebbleTrackerView extends ItemView {
 module.exports = class PebbleTrackerPlugin extends Plugin {
   async onload() {
     this.store = new PebbleTrackerStore(this);
+    this.storeLoaded = false;
+    this.storeLoadPromise = null;
 
     this.registerView(
       VIEW_TYPE_PEBBLE_TRACKER,
@@ -1167,21 +1169,9 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
       await this.activateView();
     });
 
-    try {
-      await this.store.load();
-    } catch (error) {
-      console.error("Pebble Tracker: failed to load data during onload", error);
-      new Notice("Pebble Tracker: data load failed on startup. Retrying shortly.");
-    }
-
     this.app.workspace.onLayoutReady(() => {
-      window.setTimeout(async () => {
-        try {
-          await this.store.load();
-          this.refreshViews();
-        } catch (error) {
-          console.error("Pebble Tracker: failed to reload data after layout ready", error);
-        }
+      window.setTimeout(() => {
+        void this.ensureStoreLoaded();
       }, 300);
     });
 
@@ -1258,7 +1248,34 @@ module.exports = class PebbleTrackerPlugin extends Plugin {
     await this.app.workspace.detachLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER);
   }
 
+  async ensureStoreLoaded() {
+    if (this.storeLoaded) {
+      return;
+    }
+
+    if (this.storeLoadPromise) {
+      await this.storeLoadPromise;
+      return;
+    }
+
+    this.storeLoadPromise = (async () => {
+      try {
+        await this.store.load();
+        this.storeLoaded = true;
+        this.refreshViews();
+      } catch (error) {
+        console.error("Pebble Tracker: failed to load data", error);
+      } finally {
+        this.storeLoadPromise = null;
+      }
+    })();
+
+    await this.storeLoadPromise;
+  }
+
   async activateView() {
+    await this.ensureStoreLoaded();
+
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE_PEBBLE_TRACKER)[0];
 
