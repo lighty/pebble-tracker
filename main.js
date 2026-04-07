@@ -52,15 +52,113 @@ function normalizeDateKey(timestamp) {
   return `${year}-${month}-${day}`;
 }
 
+function startOfDay(dateInput) {
+  const date = new Date(dateInput);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function getWeekStart(dateInput) {
+  const date = startOfDay(dateInput);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function getMonthStart(dateInput) {
+  const date = startOfDay(dateInput);
+  date.setDate(1);
+  return date;
+}
+
+function formatMonthKey(dateInput) {
+  const date = new Date(dateInput);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function formatWeekKey(dateInput) {
+  const weekStart = getWeekStart(dateInput);
+  const thursday = new Date(weekStart);
+  thursday.setDate(weekStart.getDate() + 3);
+  const isoYear = thursday.getFullYear();
+  const firstThursday = new Date(isoYear, 0, 4);
+  const firstWeekStart = getWeekStart(firstThursday);
+  const diffDays = Math.round(
+    (weekStart.getTime() - firstWeekStart.getTime()) / 86400000,
+  );
+  const weekNumber = Math.floor(diffDays / 7) + 1;
+  return `${isoYear}-W${String(weekNumber).padStart(2, "0")}`;
+}
+
+function getBucketKey(timestamp, granularity) {
+  if (granularity === "week") {
+    return formatWeekKey(timestamp);
+  }
+  if (granularity === "month") {
+    return formatMonthKey(timestamp);
+  }
+  return normalizeDateKey(timestamp);
+}
+
+function getBucketStartFromKey(key, granularity) {
+  if (granularity === "month") {
+    const [year, month] = key.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  }
+
+  if (granularity === "week") {
+    const [yearPart, weekPart] = key.split("-W");
+    const year = Number(yearPart);
+    const week = Number(weekPart);
+    const firstThursday = new Date(year, 0, 4);
+    const firstWeekStart = getWeekStart(firstThursday);
+    const result = new Date(firstWeekStart);
+    result.setDate(firstWeekStart.getDate() + (week - 1) * 7);
+    return result;
+  }
+
+  return new Date(`${key}T00:00:00`);
+}
+
+function formatBucketLabel(key, granularity) {
+  if (granularity === "month") {
+    return key;
+  }
+
+  if (granularity === "week") {
+    const start = getBucketStartFromKey(key, "week");
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const startLabel = new Intl.DateTimeFormat(undefined, {
+      month: "2-digit",
+      day: "2-digit",
+    }).format(start);
+    const endLabel = new Intl.DateTimeFormat(undefined, {
+      month: "2-digit",
+      day: "2-digit",
+    }).format(end);
+    return `${startLabel}-${endLabel}`;
+  }
+
+  return key;
+}
+
+function isRecordInBucket(record, bucketKey, granularity) {
+  return getBucketKey(record.timestamp, granularity) === bucketKey;
+}
+
 function getRangeStart(range) {
   if (range === "all") {
     return null;
   }
 
   const days = {
-    "7d": 7,
     "30d": 30,
-    "90d": 90,
+    "7w": 49,
+    "12m": 365,
   }[range];
 
   const start = new Date();
@@ -173,7 +271,7 @@ function deserializeRecordsCsv(text) {
     .filter((record) => record.eventTypeId);
 }
 
-function aggregateDailyCounts(records, range) {
+function aggregateCounts(records, range, granularity) {
   const rangeStart = getRangeStart(range);
   const filtered = records
     .filter((record) => {
@@ -186,29 +284,47 @@ function aggregateDailyCounts(records, range) {
 
   const counts = new Map();
   for (const record of filtered) {
-    const dateKey = normalizeDateKey(record.timestamp);
-    counts.set(dateKey, (counts.get(dateKey) ?? 0) + 1);
+    const bucketKey = getBucketKey(record.timestamp, granularity);
+    counts.set(bucketKey, (counts.get(bucketKey) ?? 0) + 1);
   }
 
   if (rangeStart) {
-    const cursor = new Date(rangeStart);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const cursor =
+      granularity === "month"
+        ? getMonthStart(rangeStart)
+        : granularity === "week"
+          ? getWeekStart(rangeStart)
+          : startOfDay(rangeStart);
+    const today =
+      granularity === "month"
+        ? getMonthStart(new Date())
+        : granularity === "week"
+          ? getWeekStart(new Date())
+          : startOfDay(new Date());
+
     while (cursor <= today) {
-      const year = cursor.getFullYear();
-      const month = String(cursor.getMonth() + 1).padStart(2, "0");
-      const day = String(cursor.getDate()).padStart(2, "0");
-      const key = `${year}-${month}-${day}`;
+      const key = getBucketKey(cursor, granularity);
       if (!counts.has(key)) {
         counts.set(key, 0);
       }
-      cursor.setDate(cursor.getDate() + 1);
+
+      if (granularity === "month") {
+        cursor.setMonth(cursor.getMonth() + 1);
+      } else if (granularity === "week") {
+        cursor.setDate(cursor.getDate() + 7);
+      } else {
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
   }
 
   return [...counts.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, count]) => ({ date, count }));
+    .map(([key, count]) => ({
+      key,
+      count,
+      label: formatBucketLabel(key, granularity),
+    }));
 }
 
 class PebbleTrackerStore {
@@ -614,6 +730,7 @@ class PebbleTrackerView extends ItemView {
     this.plugin = plugin;
     this.mode = "tracker";
     this.range = "30d";
+    this.granularity = "day";
     this.selectedDate = null;
     this.memoInputEl = null;
   }
@@ -742,7 +859,7 @@ class PebbleTrackerView extends ItemView {
       }
 
       new Notice(`${selectedEventType.name} を記録しました`);
-      this.selectedDate = normalizeDateKey(new Date().toISOString());
+      this.selectedDate = getBucketKey(new Date().toISOString(), this.granularity);
       this.plugin.refreshViews();
     });
 
@@ -781,20 +898,57 @@ class PebbleTrackerView extends ItemView {
   renderStats(container, selectedEventType) {
     const cardEl = container.createDiv({ cls: "pebble-card" });
     cardEl.createEl("div", {
-      text: "日別集計",
+      text:
+        this.granularity === "day"
+          ? "日別集計"
+          : this.granularity === "week"
+            ? "週別集計"
+            : "月別集計",
       cls: "pebble-section-title",
     });
 
+    const granularityEl = cardEl.createDiv({ cls: "pebble-range-switcher" });
+    for (const granularity of ["day", "week", "month"]) {
+      const button = granularityEl.createEl("button", {
+        text:
+          granularity === "day"
+            ? "日別"
+            : granularity === "week"
+              ? "週別"
+              : "月別",
+      });
+      if (this.granularity === granularity) {
+        button.addClass("is-active");
+      }
+      button.addEventListener("click", async () => {
+        this.granularity = granularity;
+        this.selectedDate = null;
+        await this.render();
+      });
+    }
+
+    const availableRanges =
+      this.granularity === "day"
+        ? ["30d", "all"]
+        : this.granularity === "week"
+          ? ["7w", "all"]
+          : ["12m", "all"];
+
     const rangeEl = cardEl.createDiv({ cls: "pebble-range-switcher" });
-    for (const range of ["7d", "30d", "90d", "all"]) {
+    if (!availableRanges.includes(this.range)) {
+      this.range = availableRanges[0];
+      this.selectedDate = null;
+    }
+
+    for (const range of availableRanges) {
       const button = rangeEl.createEl("button", {
         text:
-          range === "7d"
-            ? "7日"
-            : range === "30d"
-              ? "30日"
-              : range === "90d"
-                ? "90日"
+          range === "30d"
+            ? "30日"
+            : range === "7w"
+              ? "7週"
+              : range === "12m"
+                ? "12か月"
                 : "全期間",
       });
       if (this.range === range) {
@@ -809,16 +963,16 @@ class PebbleTrackerView extends ItemView {
     const records = selectedEventType
       ? this.plugin.store.listRecordsByEventType(selectedEventType.id)
       : [];
-    const dailyCounts = aggregateDailyCounts(records, this.range);
+    const dailyCounts = aggregateCounts(records, this.range, this.granularity);
 
     if (!this.selectedDate && dailyCounts.length > 0) {
-      this.selectedDate = dailyCounts[dailyCounts.length - 1].date;
+      this.selectedDate = dailyCounts[dailyCounts.length - 1].key;
     }
     if (
       this.selectedDate &&
-      !dailyCounts.some((dailyCount) => dailyCount.date === this.selectedDate)
+      !dailyCounts.some((dailyCount) => dailyCount.key === this.selectedDate)
     ) {
-      this.selectedDate = dailyCounts[dailyCounts.length - 1]?.date ?? null;
+      this.selectedDate = dailyCounts[dailyCounts.length - 1]?.key ?? null;
     }
 
     const maxCount =
@@ -833,7 +987,7 @@ class PebbleTrackerView extends ItemView {
     } else {
       for (const item of dailyCounts) {
         const barWrapEl = chartEl.createDiv({ cls: "pebble-chart-bar-wrap" });
-        if (item.date === this.selectedDate) {
+        if (item.key === this.selectedDate) {
           barWrapEl.addClass("is-selected");
         }
         barWrapEl.createSpan({
@@ -850,11 +1004,11 @@ class PebbleTrackerView extends ItemView {
           barEl.addClass("is-zero");
         }
         barEl.addEventListener("click", async () => {
-          this.selectedDate = item.date;
+          this.selectedDate = item.key;
           await this.render();
         });
         barWrapEl.createSpan({
-          text: item.date.slice(5),
+          text: item.label,
           cls: "pebble-chart-label",
         });
       }
@@ -866,7 +1020,12 @@ class PebbleTrackerView extends ItemView {
 
     const tableEl = container.createDiv({ cls: "pebble-card" });
     tableEl.createEl("div", {
-      text: "日別一覧",
+      text:
+        this.granularity === "day"
+          ? "日別一覧"
+          : this.granularity === "week"
+            ? "週別一覧"
+            : "月別一覧",
       cls: "pebble-section-title",
     });
 
@@ -879,26 +1038,28 @@ class PebbleTrackerView extends ItemView {
       const listEl = tableEl.createDiv({ cls: "pebble-daily-list" });
       for (const item of [...dailyCounts].reverse()) {
         const rowEl = listEl.createDiv({ cls: "pebble-daily-row" });
-        if (item.date === this.selectedDate) {
+        if (item.key === this.selectedDate) {
           rowEl.addClass("is-selected");
         }
         rowEl.addEventListener("click", async () => {
-          this.selectedDate = item.date;
+          this.selectedDate = item.key;
           await this.render();
         });
-        rowEl.createSpan({ text: item.date });
+        rowEl.createSpan({ text: item.label });
         rowEl.createSpan({ text: `${item.count}回` });
       }
     }
 
     const detailEl = container.createDiv({ cls: "pebble-card" });
     detailEl.createEl("div", {
-      text: this.selectedDate ? `${this.selectedDate} の記録` : "記録一覧",
+      text: this.selectedDate
+        ? `${formatBucketLabel(this.selectedDate, this.granularity)} の記録`
+        : "記録一覧",
       cls: "pebble-section-title",
     });
 
     const recordsForDay = records.filter(
-      (record) => normalizeDateKey(record.timestamp) === this.selectedDate,
+      (record) => isRecordInBucket(record, this.selectedDate, this.granularity),
     );
 
     if (recordsForDay.length === 0) {
