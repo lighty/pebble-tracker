@@ -185,6 +185,76 @@ function formatBucketLabel(key, granularity) {
   return key;
 }
 
+function getChartLabelParts(key, granularity, previousKey = null) {
+  if (granularity === "hour") {
+    const date = getBucketStartFromKey(key, "hour");
+    const hour = date.getHours();
+    const hourLabel = String(hour).padStart(2, "0");
+
+    if (hour === 0) {
+      const dateLabel = new Intl.DateTimeFormat(undefined, {
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date);
+      return [dateLabel, hourLabel];
+    }
+
+    return ["", hourLabel];
+  }
+
+  if (granularity === "day") {
+    const date = getBucketStartFromKey(key, "day");
+    const previousDate = previousKey
+      ? getBucketStartFromKey(previousKey, "day")
+      : null;
+    const dayLabel = new Intl.DateTimeFormat(undefined, {
+      day: "2-digit",
+    }).format(date);
+    const shouldShowMonth =
+      !previousDate ||
+      previousDate.getFullYear() !== date.getFullYear() ||
+      previousDate.getMonth() !== date.getMonth();
+    const yearMonthLabel = `${date.getFullYear()}/${String(
+      date.getMonth() + 1,
+    ).padStart(2, "0")}`;
+
+    return [shouldShowMonth ? yearMonthLabel : "", dayLabel];
+  }
+
+  if (granularity === "week") {
+    const date = getBucketStartFromKey(key, "week");
+    const previousDate = previousKey
+      ? getBucketStartFromKey(previousKey, "week")
+      : null;
+    const dayLabel = new Intl.DateTimeFormat(undefined, {
+      day: "2-digit",
+    }).format(date);
+    const shouldShowMonth =
+      !previousDate ||
+      previousDate.getFullYear() !== date.getFullYear() ||
+      previousDate.getMonth() !== date.getMonth();
+    const yearMonthLabel = `${date.getFullYear()}/${String(
+      date.getMonth() + 1,
+    ).padStart(2, "0")}`;
+
+    return [shouldShowMonth ? yearMonthLabel : "", dayLabel];
+  }
+
+  if (granularity === "month") {
+    const date = getBucketStartFromKey(key, "month");
+    const previousDate = previousKey
+      ? getBucketStartFromKey(previousKey, "month")
+      : null;
+    const monthLabel = String(date.getMonth() + 1).padStart(2, "0");
+    const shouldShowYear =
+      !previousDate || previousDate.getFullYear() !== date.getFullYear();
+
+    return [shouldShowYear ? String(date.getFullYear()) : "", monthLabel];
+  }
+
+  return ["", formatBucketLabel(key, granularity)];
+}
+
 function isRecordInBucket(record, bucketKey, granularity) {
   return getBucketKey(record.timestamp, granularity) === bucketKey;
 }
@@ -828,6 +898,8 @@ class PebbleTrackerView extends ItemView {
     this.granularity = "day";
     this.selectedDate = null;
     this.memoInputEl = null;
+    this.chartScrollLeft = 0;
+    this.hasInitializedChartScroll = false;
   }
 
   getViewType() {
@@ -991,6 +1063,7 @@ class PebbleTrackerView extends ItemView {
   }
 
   renderStats(container, selectedEventType) {
+    const previousChartScrollLeft = this.chartScrollLeft;
     const cardEl = container.createDiv({ cls: "pebble-card" });
     cardEl.createEl("div", {
       text:
@@ -1022,6 +1095,8 @@ class PebbleTrackerView extends ItemView {
       button.addEventListener("click", async () => {
         this.granularity = granularity;
         this.selectedDate = null;
+        this.chartScrollLeft = 0;
+        this.hasInitializedChartScroll = false;
         await this.render();
       });
     }
@@ -1039,6 +1114,8 @@ class PebbleTrackerView extends ItemView {
     if (!availableRanges.includes(this.range)) {
       this.range = availableRanges[0];
       this.selectedDate = null;
+      this.chartScrollLeft = 0;
+      this.hasInitializedChartScroll = false;
     }
 
     for (const range of availableRanges) {
@@ -1059,6 +1136,8 @@ class PebbleTrackerView extends ItemView {
       }
       button.addEventListener("click", async () => {
         this.range = range;
+        this.chartScrollLeft = 0;
+        this.hasInitializedChartScroll = false;
         await this.render();
       });
     }
@@ -1082,42 +1161,148 @@ class PebbleTrackerView extends ItemView {
       aggregatedCounts.reduce((max, item) => Math.max(max, item.count), 0) || 1;
 
     const chartEl = cardEl.createDiv({ cls: "pebble-chart" });
+    chartEl.addEventListener("scroll", () => {
+      this.chartScrollLeft = chartEl.scrollLeft;
+    });
     if (aggregatedCounts.length === 0) {
       chartEl.createEl("p", {
         text: "対象期間の記録がありません。",
         cls: "pebble-empty-text",
       });
     } else {
-      for (const item of aggregatedCounts) {
-        const barWrapEl = chartEl.createDiv({ cls: "pebble-chart-bar-wrap" });
-        if (item.key === this.selectedDate) {
-          barWrapEl.addClass("is-selected");
+      const pointGap = 44;
+      const chartHeight = 132;
+      const chartPadding = 24;
+      const lineWidth = Math.max(
+        aggregatedCounts.length * pointGap,
+        chartEl.clientWidth || 0,
+      );
+      const svgWidth = lineWidth + chartPadding * 2;
+      const svgHeight = chartHeight + chartPadding * 2;
+      const linePoints = aggregatedCounts.map((item, index) => {
+        const x = chartPadding + index * pointGap + pointGap / 2;
+        const y =
+          chartPadding + chartHeight - (item.count / maxCount) * chartHeight;
+        return { ...item, x, y };
+      });
+
+      const canvasEl = chartEl.createDiv({ cls: "pebble-line-chart-canvas" });
+      canvasEl.style.width = `${svgWidth}px`;
+
+      const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svgEl.setAttribute("class", "pebble-line-chart-svg");
+      svgEl.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
+      svgEl.setAttribute("width", String(svgWidth));
+      svgEl.setAttribute("height", String(svgHeight));
+
+      const areaPoints = [
+        `${linePoints[0].x},${chartPadding + chartHeight}`,
+        ...linePoints.map((point) => `${point.x},${point.y}`),
+        `${linePoints[linePoints.length - 1].x},${chartPadding + chartHeight}`,
+      ].join(" ");
+      const polylinePoints = linePoints
+        .map((point) => `${point.x},${point.y}`)
+        .join(" ");
+
+      const areaEl = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "polygon",
+      );
+      areaEl.setAttribute("class", "pebble-line-chart-area");
+      areaEl.setAttribute("points", areaPoints);
+      svgEl.appendChild(areaEl);
+
+      const lineEl = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "polyline",
+      );
+      lineEl.setAttribute("class", "pebble-line-chart-line");
+      lineEl.setAttribute("points", polylinePoints);
+      svgEl.appendChild(lineEl);
+
+      for (const point of linePoints) {
+        const dotEl = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "circle",
+        );
+        dotEl.setAttribute("class", "pebble-line-chart-dot");
+        if (point.key === this.selectedDate) {
+          dotEl.classList.add("is-selected");
         }
-        barWrapEl.createSpan({
-          text: String(item.count),
-          cls: "pebble-chart-count",
-        });
-        const barAreaEl = barWrapEl.createDiv({ cls: "pebble-chart-bar-area" });
-        const barEl = barAreaEl.createDiv({ cls: "pebble-chart-bar" });
-        if (item.count > 0) {
-          barEl.style.height = `${(item.count / maxCount) * 100}%`;
-          barEl.addClass("has-value");
-        } else {
-          barEl.style.height = "0%";
-          barEl.addClass("is-zero");
+        if (point.count === 0) {
+          dotEl.classList.add("is-zero");
         }
-        barEl.addEventListener("click", async () => {
-          this.selectedDate = item.key;
+        dotEl.setAttribute("cx", String(point.x));
+        dotEl.setAttribute("cy", String(point.y));
+        dotEl.setAttribute("r", "6");
+        svgEl.appendChild(dotEl);
+      }
+
+      canvasEl.appendChild(svgEl);
+
+      const markersEl = chartEl.createDiv({ cls: "pebble-line-chart-markers" });
+      markersEl.style.width = `${svgWidth}px`;
+      const labelsEl = chartEl.createDiv({ cls: "pebble-line-chart-labels" });
+      labelsEl.style.width = `${svgWidth}px`;
+      for (const [index, point] of linePoints.entries()) {
+        const markerEl = markersEl.createDiv({ cls: "pebble-line-chart-marker" });
+        if (point.key === this.selectedDate) {
+          markerEl.addClass("is-selected");
+        }
+        markerEl.style.left = `${point.x}px`;
+        markerEl.style.top = `${point.y}px`;
+        markerEl.addEventListener("click", async () => {
+          this.selectedDate = point.key;
           await this.render();
         });
-        barWrapEl.createSpan({
-          text: item.label,
-          cls: "pebble-chart-label",
+
+        const countEl = markerEl.createSpan({
+          text: String(point.count),
+          cls: "pebble-chart-count",
         });
+        if (point.count === 0) {
+          countEl.addClass("is-zero");
+        }
+
+        const labelSlotEl = labelsEl.createDiv({ cls: "pebble-line-chart-label-slot" });
+        labelSlotEl.style.left = `${point.x}px`;
+        if (point.key === this.selectedDate) {
+          labelSlotEl.addClass("is-selected");
+        }
+
+        const [primaryLabel, secondaryLabel] = getChartLabelParts(
+          point.key,
+          this.granularity,
+          linePoints[index - 1]?.key ?? null,
+        );
+        labelSlotEl.createSpan({
+          text: primaryLabel,
+          cls: "pebble-chart-label-primary",
+        });
+        if (secondaryLabel) {
+          labelSlotEl.createSpan({
+            text: secondaryLabel,
+            cls: "pebble-chart-label-secondary",
+          });
+        }
       }
 
       window.requestAnimationFrame(() => {
-        chartEl.scrollLeft = chartEl.scrollWidth;
+        if (this.hasInitializedChartScroll) {
+          chartEl.scrollLeft = previousChartScrollLeft;
+          return;
+        }
+
+        const targetKey = this.selectedDate ?? aggregatedCounts[aggregatedCounts.length - 1]?.key;
+        const targetPoint = linePoints.find((point) => point.key === targetKey);
+        const viewportWidth = chartEl.clientWidth;
+        const targetScrollLeft = Math.max(
+          0,
+          (targetPoint?.x ?? svgWidth) - viewportWidth * 0.7,
+        );
+        chartEl.scrollLeft = targetScrollLeft;
+        this.chartScrollLeft = targetScrollLeft;
+        this.hasInitializedChartScroll = true;
       });
     }
 

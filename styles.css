@@ -129,54 +129,68 @@
 }
 
 .pebble-chart {
-  display: flex;
-  gap: 8px;
-  align-items: end;
-  min-height: 180px;
+  position: relative;
+  min-height: 236px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 4px;
+  padding: 8px 0 12px;
   scrollbar-width: thin;
 }
 
-.pebble-chart-bar-wrap {
+.pebble-line-chart-canvas {
+  position: relative;
+  height: 164px;
+}
+
+.pebble-line-chart-svg {
+  display: block;
+}
+
+.pebble-line-chart-area {
+  fill: none;
+}
+
+.pebble-line-chart-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--pebble-accent) 80%, white 20%);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pebble-line-chart-markers {
+  position: absolute;
+  inset: 0 0 52px 0;
+}
+
+.pebble-line-chart-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  flex: 0 0 36px;
-}
-
-.pebble-chart-bar-area {
-  height: 120px;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-}
-
-.pebble-chart-bar-wrap.is-selected .pebble-chart-bar {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, #d6a267 58%, white 42%) 0%,
-    #d6a267 100%
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #9a6e45 68%, transparent 32%);
-}
-
-.pebble-chart-bar {
-  width: 100%;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--pebble-accent) 72%, white 28%) 0%, var(--pebble-accent) 100%);
+  gap: 10px;
   cursor: pointer;
+  width: 24px;
+  height: 44px;
 }
 
-.pebble-chart-bar.has-value {
-  min-height: 8px;
+.pebble-line-chart-labels {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
 }
 
-.pebble-chart-bar.is-zero {
-  min-height: 1px;
-  opacity: 0.25;
+.pebble-line-chart-label-slot {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .pebble-chart-count {
@@ -184,9 +198,39 @@
   font-weight: 600;
 }
 
-.pebble-chart-label {
+.pebble-line-chart-dot {
+  fill: var(--background-primary);
+  stroke: color-mix(in srgb, var(--pebble-accent) 82%, white 18%);
+  stroke-width: 1.5;
+}
+
+.pebble-line-chart-dot.is-selected {
+  fill: #d6a267;
+  stroke: #9a6e45;
+}
+
+.pebble-line-chart-marker.is-selected .pebble-chart-count {
+  color: #9a6e45;
+}
+
+.pebble-chart-label-primary,
+.pebble-chart-label-secondary {
   font-size: 10px;
   color: var(--pebble-muted);
+  white-space: nowrap;
+}
+
+.pebble-chart-label-primary {
+  line-height: 1;
+}
+
+.pebble-chart-label-secondary {
+  line-height: 1;
+}
+
+.pebble-line-chart-label-slot.is-selected .pebble-chart-label-primary,
+.pebble-line-chart-label-slot.is-selected .pebble-chart-label-secondary {
+  color: color-mix(in srgb, #9a6e45 82%, var(--text-normal) 18%);
 }
 
 .pebble-empty-state {
