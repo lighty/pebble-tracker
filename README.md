@@ -7,7 +7,7 @@ Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and
 - Dedicated tracker tab for fast event logging
 - GUI-based event creation, editing, and deletion
 - Optional memo input per event type
-- Aggregate views for daily, weekly, and monthly counts
+- Aggregate views for hourly, daily, weekly, and monthly counts
 - Bar chart and list views for the selected aggregation unit
 - Shared event definitions through a vault settings file
 - Record storage in a vault file at `PebbleTracker/records.csv.md`
@@ -18,6 +18,7 @@ Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and
 - Daily: `30 days` or `All time`
 - Weekly: `7 weeks` or `All time`
 - Monthly: `12 months` or `All time`
+- Hourly: `24 hours` or `All time`
 
 ## File Layout
 
@@ -46,7 +47,7 @@ The file uses a `.md` suffix so it stays visible and openable in Obsidian's file
 2. Open `Pebble Tracker` from the left ribbon or the `Open Pebble Tracker` command
 3. Create one or more event types
 4. Select an event, optionally add a memo, and tap the record button
-5. Switch to the stats view to inspect daily, weekly, or monthly aggregates
+5. Switch to the stats view to inspect hourly, daily, weekly, or monthly aggregates
 
 ## Installation
 
