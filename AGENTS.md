@@ -17,11 +17,12 @@
 ファイル名は機能単位で分かるように付けます。例: `src/tracker.ts`、`tests/tracker.test.ts`
 
 ## ビルド・テスト・開発コマンド
-まだビルドツールやテストランナーは導入していません。現時点の主要確認コマンドは以下です。
+簡易な package scripts ベースの開発入口を用意しています。現時点の主要確認コマンドは以下です。
 
 - `ls -la`: ワークスペースの確認
 - `find . -maxdepth 2`: ディレクトリ構成の確認
-- `node --check main.js`: プラグイン本体の構文確認
+- `npm run dev`: ブラウザ用 UI プレビューサーバを起動
+- `npm run check`: `main.js` と開発用スクリプトの構文確認
 
 新しいツールチェーンを導入する場合は、`Makefile` や package scripts など、共通の入口を用意し、`README.md` とこのファイルの両方を更新してください。
 

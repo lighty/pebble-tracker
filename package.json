@@ -1,0 +1,8 @@
+{
+  "name": "pebble-tracker",
+  "private": true,
+  "scripts": {
+    "dev": "node dev/server.js",
+    "check": "node --check main.js && node --check src/pebble-renderer.js && node --check dev/server.js && node --check dev/preview-app.js"
+  }
+}

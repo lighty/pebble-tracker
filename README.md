@@ -79,8 +79,33 @@ This repository publishes GitHub Releases for BRAT and future Community Plugins 
 
 ## Local Check
 
-There is no build pipeline yet. The current minimum validation step is:
+For plugin syntax and the browser preview tool:
 
 ```bash
-node --check main.js
+npm run check
 ```
+
+## UI Preview
+
+You can preview the plugin UI in a browser without copying files into an Obsidian vault on every edit.
+
+```bash
+npm run dev
+```
+
+Then open `http://127.0.0.1:4173`.
+
+What the preview supports:
+
+- Reuses the real [styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/styles.css)
+- Uses the shared renderer from [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js) for both Obsidian and browser preview
+- Lets you switch theme, viewport width, and sample data
+- Reloads automatically when preview files, `styles.css`, or the shared renderer change
+
+Preview files:
+
+- [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js): shared UI rendering and aggregation logic
+- [dev/server.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/server.js): local development server with live reload
+- [dev/index.html](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/index.html): preview entry page
+- [dev/preview-app.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/preview-app.js): browser-side preview logic
+- [dev/preview.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/preview.css): preview shell styling
