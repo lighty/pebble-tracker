@@ -17,6 +17,7 @@ const DEFAULT_DATA = {
   eventTypes: [],
   selectedEventTypeId: null,
 };
+const INITIAL_RECENT_RECORDS_LIMIT = 8;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -898,7 +899,7 @@ class PebbleTrackerView extends ItemView {
     this.granularity = "day";
     this.selectedDate = null;
     this.memoInputEl = null;
-    this.recentRecordsLimit = 5;
+    this.recentRecordsLimit = INITIAL_RECENT_RECORDS_LIMIT;
     this.recentRecordsBatchSize = 10;
     this.recentRecordsEventTypeId = null;
     this.recentRecordsScrollTop = 0;
@@ -1044,7 +1045,7 @@ class PebbleTrackerView extends ItemView {
     const selectedEventTypeId = selectedEventType?.id ?? null;
     if (this.recentRecordsEventTypeId !== selectedEventTypeId) {
       this.recentRecordsEventTypeId = selectedEventTypeId;
-      this.recentRecordsLimit = 5;
+      this.recentRecordsLimit = INITIAL_RECENT_RECORDS_LIMIT;
       this.recentRecordsScrollTop = 0;
     }
 
