@@ -85,6 +85,13 @@
   gap: 8px;
 }
 
+.pebble-record-list-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
 .pebble-record-row,
 .pebble-daily-row,
 .pebble-event-row {

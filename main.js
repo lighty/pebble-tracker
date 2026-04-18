@@ -898,6 +898,11 @@ class PebbleTrackerView extends ItemView {
     this.granularity = "day";
     this.selectedDate = null;
     this.memoInputEl = null;
+    this.recentRecordsLimit = 5;
+    this.recentRecordsBatchSize = 10;
+    this.recentRecordsEventTypeId = null;
+    this.recentRecordsScrollTop = 0;
+    this.isLoadingMoreRecentRecords = false;
     this.chartScrollLeft = 0;
     this.hasInitializedChartScroll = false;
   }
@@ -1036,9 +1041,22 @@ class PebbleTrackerView extends ItemView {
       cls: "pebble-section-title",
     });
 
+    const selectedEventTypeId = selectedEventType?.id ?? null;
+    if (this.recentRecordsEventTypeId !== selectedEventTypeId) {
+      this.recentRecordsEventTypeId = selectedEventTypeId;
+      this.recentRecordsLimit = 5;
+      this.recentRecordsScrollTop = 0;
+    }
+
     const recentRecords = selectedEventType
-      ? this.plugin.store.listRecentRecords(selectedEventType.id, 5)
+      ? this.plugin.store.listRecentRecords(
+          selectedEventType.id,
+          this.recentRecordsLimit,
+        )
       : [];
+    const totalRecentRecordCount = selectedEventType
+      ? this.plugin.store.listRecordsByEventType(selectedEventType.id).length
+      : 0;
 
     if (recentRecords.length === 0) {
       recentEl.createEl("p", {
@@ -1048,7 +1066,30 @@ class PebbleTrackerView extends ItemView {
       return;
     }
 
-    const listEl = recentEl.createDiv({ cls: "pebble-record-list" });
+    const listScrollEl = recentEl.createDiv({ cls: "pebble-record-list-scroll" });
+    listScrollEl.addEventListener("scroll", () => {
+      this.recentRecordsScrollTop = listScrollEl.scrollTop;
+    });
+    if (recentRecords.length < totalRecentRecordCount) {
+      listScrollEl.addEventListener("scroll", async () => {
+        const remainingScroll =
+          listScrollEl.scrollHeight - listScrollEl.scrollTop - listScrollEl.clientHeight;
+        if (remainingScroll > 24 || this.isLoadingMoreRecentRecords) {
+          return;
+        }
+
+        this.isLoadingMoreRecentRecords = true;
+        try {
+          this.recentRecordsScrollTop = listScrollEl.scrollTop;
+          this.recentRecordsLimit += this.recentRecordsBatchSize;
+          await this.render();
+        } finally {
+          this.isLoadingMoreRecentRecords = false;
+        }
+      });
+    }
+
+    const listEl = listScrollEl.createDiv({ cls: "pebble-record-list" });
     for (const record of recentRecords) {
       const rowEl = listEl.createDiv({ cls: "pebble-record-row" });
       rowEl.createSpan({
@@ -1060,6 +1101,11 @@ class PebbleTrackerView extends ItemView {
         cls: "pebble-record-memo",
       });
     }
+
+    window.requestAnimationFrame(() => {
+      listScrollEl.scrollTop = this.recentRecordsScrollTop;
+    });
+
   }
 
   renderStats(container, selectedEventType) {
