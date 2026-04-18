@@ -2,7 +2,9 @@
   "name": "pebble-tracker",
   "private": true,
   "scripts": {
+    "build": "node scripts/build.js",
     "dev": "node dev/server.js",
-    "check": "node --check main.js && node --check src/pebble-renderer.js && node --check dev/server.js && node --check dev/preview-app.js"
+    "check": "node --check src/main.js && node --check src/pebble-renderer.js && node --check scripts/build.js && node --check scripts/prepare-release.js && node --check dev/server.js && node --check dev/preview-app.js",
+    "release:prepare": "node scripts/prepare-release.js"
   }
 }

@@ -253,7 +253,7 @@
     const days = {
       "24h": 1,
       "30d": 30,
-      "7w": 49,
+      "14w": 98,
       "12m": 365,
     }[range];
 
@@ -336,7 +336,7 @@
       return ["24h", "all"];
     }
     if (granularity === "week") {
-      return ["7w", "all"];
+      return ["14w", "all"];
     }
     if (granularity === "month") {
       return ["12m", "all"];
@@ -553,8 +553,8 @@
             ? "24時間"
             : range === "30d"
               ? "30日"
-              : range === "7w"
-                ? "7週"
+              : range === "14w"
+                ? "14週"
                 : range === "12m"
                   ? "12か月"
                   : "全期間",

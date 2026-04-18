@@ -8,7 +8,7 @@ const {
   normalizePath,
   setIcon,
 } = require("obsidian");
-const { renderPebbleTrackerView } = require("./src/pebble-renderer");
+const { renderPebbleTrackerView } = require("./pebble-renderer");
 
 const VIEW_TYPE_PEBBLE_TRACKER = "pebble-tracker-view";
 const RECORDS_CSV_PATH = "PebbleTracker/records.csv.md";

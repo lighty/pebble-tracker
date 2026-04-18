@@ -231,7 +231,7 @@
     previewCard.appendChild(
       createElement("p", {
         className: "preview-note",
-        text: "左で状態を変えつつ、右で main.js と共有している描画コードを確認できます。",
+        text: "左で状態を変えつつ、右で src から使われる共有描画コードを確認できます。",
       }),
     );
 

@@ -16,15 +16,18 @@ Pebble Tracker is an Obsidian plugin for quickly logging user-defined events and
 ## Aggregation Modes
 
 - Daily: `30 days` or `All time`
-- Weekly: `7 weeks` or `All time`
+- Weekly: `14 weeks` or `All time`
 - Monthly: `12 months` or `All time`
 - Hourly: `24 hours` or `All time`
 
 ## File Layout
 
-- [manifest.json](/Users/lighty/ghq/github.com/lighty/pebble-tracker/manifest.json): Obsidian plugin manifest
-- [main.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/main.js): Plugin implementation
-- [styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/styles.css): UI styles
+- [src/manifest.json](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/manifest.json): source manifest
+- [src/main.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/main.js): source plugin implementation
+- [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js): shared renderer source
+- [src/styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/styles.css): source UI styles
+- `dist/`: build output for Obsidian installation and releases
+- `release/`: prepared release assets for GitHub upload
 - [docs/mvp-spec.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/mvp-spec.md): MVP specification
 - [docs/technical-design.md](/Users/lighty/ghq/github.com/lighty/pebble-tracker/docs/technical-design.md): Technical design notes
 
@@ -63,7 +66,13 @@ BRAT expects this repository to publish GitHub Releases. If installation fails, 
 
 ### Manual install
 
-Copy these files into your vault at `.obsidian/plugins/pebble-tracker/`:
+Build first:
+
+```bash
+npm run build
+```
+
+Then copy these files from `dist/` into your vault at `.obsidian/plugins/pebble-tracker/`:
 
 - `manifest.json`
 - `main.js`
@@ -76,6 +85,7 @@ This repository publishes GitHub Releases for BRAT and future Community Plugins 
 - `manifest.json`
 - `main.js`
 - `styles.css`
+- `versions.json`
 
 ## Local Check
 
@@ -83,6 +93,18 @@ For plugin syntax and the browser preview tool:
 
 ```bash
 npm run check
+```
+
+Build distributable files:
+
+```bash
+npm run build
+```
+
+Prepare release upload assets under `release/<version>/`:
+
+```bash
+npm run release:prepare
 ```
 
 ## UI Preview
@@ -97,14 +119,16 @@ Then open `http://127.0.0.1:4173`.
 
 What the preview supports:
 
-- Reuses the real [styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/styles.css)
-- Uses the shared renderer from [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js) for both Obsidian and browser preview
+- Uses the source [src/styles.css](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/styles.css)
+- Uses the shared renderer from [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js)
 - Lets you switch theme, viewport width, and sample data
-- Reloads automatically when preview files, `styles.css`, or the shared renderer change
+- Reloads automatically when preview files or `src/` source files change
 
 Preview files:
 
 - [src/pebble-renderer.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/src/pebble-renderer.js): shared UI rendering and aggregation logic
+- [scripts/build.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/scripts/build.js): builds `src/` into `dist/`
+- [scripts/prepare-release.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/scripts/prepare-release.js): creates release upload assets
 - [dev/server.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/server.js): local development server with live reload
 - [dev/index.html](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/index.html): preview entry page
 - [dev/preview-app.js](/Users/lighty/ghq/github.com/lighty/pebble-tracker/dev/preview-app.js): browser-side preview logic

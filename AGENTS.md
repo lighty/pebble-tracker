@@ -6,11 +6,13 @@
 ## プロジェクト構成
 このリポジトリは現在、Obsidian プラグインの最小実装を含みます。役割ごとに以下のように整理します。
 
-- `main.js`: プラグイン本体
-- `manifest.json`: Obsidian プラグイン定義
-- `styles.css`: UI スタイル
+- `src/main.js`: プラグイン本体のソース
+- `src/manifest.json`: Obsidian プラグイン定義のソース
+- `src/styles.css`: UI スタイルのソース
+- `src/pebble-renderer.js`: 共有描画ロジック
+- `dist/`: ビルド成果物
+- `release/`: GitHub Release 用にまとめた成果物
 - `docs/`: 設計メモやアーキテクチャ文書
-- `src/`: 将来 TypeScript へ移行する場合のアプリケーションコード置き場
 - `test/` または `tests/`: 自動テスト
 - `assets/`: 画像や固定データなどの静的ファイル
 
@@ -22,7 +24,9 @@
 - `ls -la`: ワークスペースの確認
 - `find . -maxdepth 2`: ディレクトリ構成の確認
 - `npm run dev`: ブラウザ用 UI プレビューサーバを起動
-- `npm run check`: `main.js` と開発用スクリプトの構文確認
+- `npm run build`: `src/` から `dist/` を生成
+- `npm run release:prepare`: GitHub Release 用のアップロードファイルを `release/` に生成
+- `npm run check`: `src/` と開発用スクリプトの構文確認
 
 新しいツールチェーンを導入する場合は、`Makefile` や package scripts など、共通の入口を用意し、`README.md` とこのファイルの両方を更新してください。
 

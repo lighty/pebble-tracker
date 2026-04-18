@@ -16,9 +16,9 @@ const MIME_TYPES = {
 
 const clients = new Set();
 const watchTargets = [
-  path.join(ROOT_DIR, "styles.css"),
-  path.join(ROOT_DIR, "main.js"),
-  path.join(ROOT_DIR, "manifest.json"),
+  path.join(ROOT_DIR, "src", "styles.css"),
+  path.join(ROOT_DIR, "src", "main.js"),
+  path.join(ROOT_DIR, "src", "manifest.json"),
   path.join(ROOT_DIR, "src", "pebble-renderer.js"),
   path.join(DEV_DIR, "index.html"),
   path.join(DEV_DIR, "preview.css"),
@@ -83,11 +83,6 @@ const server = http.createServer((request, response) => {
 
   if (requestUrl.pathname === "/") {
     serveFile(response, path.join(DEV_DIR, "index.html"));
-    return;
-  }
-
-  if (requestUrl.pathname === "/styles.css") {
-    serveFile(response, path.join(ROOT_DIR, "styles.css"));
     return;
   }
 
